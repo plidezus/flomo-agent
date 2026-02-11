@@ -17,7 +17,11 @@ export type {
   StoredSession,
   SessionMetadata,
   SessionHeader,
+  SessionPersistentField,
 } from './types.ts';
+
+// Field constants
+export { SESSION_PERSISTENT_FIELDS } from './types.ts';
 
 // Storage functions
 export {
@@ -43,6 +47,7 @@ export {
   // Metadata updates
   updateSessionSdkId,
   updateSessionMetadata,
+  canUpdateSdkCwd,
   flagSession,
   unflagSession,
   setSessionTodoState,
@@ -55,6 +60,24 @@ export {
   listFlaggedSessions,
   listCompletedSessions,
   listInboxSessions,
+  // Archive management
+  archiveSession,
+  unarchiveSession,
+  listArchivedSessions,
+  listActiveSessions,
+  deleteOldArchivedSessions,
+  // Sub-session hierarchy
+  sortSiblings,
+  createSubSession,
+  getChildSessions,
+  getParentSession,
+  getSiblingsSessions,
+  getSessionFamily,
+  hasChildren,
+  updateSiblingOrder,
+  archiveSessionCascade,
+  unarchiveSessionCascade,
+  deleteSessionCascade,
   // Plan storage
   formatPlanAsMarkdown,
   parsePlanFromMarkdown,
@@ -76,6 +99,9 @@ export {
   createSessionHeader,
 } from './jsonl.ts';
 
+// Field utilities
+export { pickSessionFields } from './utils.ts';
+
 // Slug generator utilities
 export {
   generateDatePrefix,
@@ -87,5 +113,11 @@ export {
 
 // Word lists (for customization if needed)
 export { ADJECTIVES, NOUNS } from './word-lists.ts';
+
+// Session ID validation (security)
+export {
+  validateSessionId,
+  sanitizeSessionId,
+} from './validation.ts';
 
 

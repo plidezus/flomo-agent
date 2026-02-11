@@ -21,6 +21,9 @@ export const KEYS = {
   expandedFolders: 'expanded-folders',
   collapsedSidebarItems: 'collapsed-sidebar-items',
 
+  // Focus mode
+  focusModeEnabled: 'focus-mode-enabled',
+
   // Right sidebar (chat page)
   rightSidebarVisible: 'right-sidebar-visible',
   rightSidebarWidth: 'right-sidebar-width',
@@ -41,6 +44,18 @@ export const KEYS = {
 
   // TurnCard expansion state (persisted across session switches)
   turnCardExpansion: 'turncard-expansion',
+
+  // Last selected session (workspace-scoped via suffix)
+  lastSelectedSessionId: 'last-selected-session-id',
+
+  // Settings navigation
+  lastSettingsSubpage: 'last-settings-subpage',
+
+  // Appearance
+  showConnectionIcons: 'show-connection-icons',
+
+  // What's New
+  whatsNewLastSeenVersion: 'whats-new-last-seen-version',
 } as const
 
 export type StorageKey = typeof KEYS[keyof typeof KEYS]

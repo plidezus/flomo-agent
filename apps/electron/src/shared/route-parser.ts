@@ -6,18 +6,18 @@
  *
  * Supports route formats:
  * - Action: action/{name}[/{id}] - Trigger side effects
- * - Compound: {filter}[/chat/{sessionId}] - View routes for full navigation state
+ * - Compound: {filter}[/session/{sessionId}] - View routes for full navigation state
  */
 
 import type {
   NavigationState,
-  ChatFilter,
+  SessionFilter,
   SourceFilter,
-  SettingsSubpage,
   RightSidebarPanel,
   ProjectsNavigationState,
   ProjectNavigationState,
 } from './types'
+import { isValidSettingsSubpage, type SettingsSubpage } from './settings-registry'
 
 // =============================================================================
 // Route Types
@@ -36,13 +36,13 @@ export interface ParsedRoute {
 // Compound Route Types (new format)
 // =============================================================================
 
-export type NavigatorType = 'chats' | 'sources' | 'skills' | 'settings' | 'projects' | 'project'
+export type NavigatorType = 'sessions' | 'sources' | 'skills' | 'settings' | 'projects' | 'project'
 
 export interface ParsedCompoundRoute {
   /** The navigator type */
   navigator: NavigatorType
-  /** Chat filter (only for chats navigator) */
-  chatFilter?: ChatFilter
+  /** Session filter (only for sessions navigator) */
+  sessionFilter?: SessionFilter
   /** Source filter (only for sources navigator) */
   sourceFilter?: SourceFilter
   /** Details page info (null for empty state) */
@@ -60,7 +60,7 @@ export interface ParsedCompoundRoute {
  * Known prefixes that indicate a compound route
  */
 const COMPOUND_ROUTE_PREFIXES = [
-  'allChats', 'flagged', 'state', 'label', 'view', 'sources', 'skills', 'settings', 'projects', 'project'
+  'allSessions', 'flagged', 'archived', 'state', 'label', 'view', 'sources', 'skills', 'settings', 'projects', 'project'
 ]
 
 /**
@@ -75,9 +75,9 @@ export function isCompoundRoute(route: string): boolean {
  * Parse a compound route into structured navigation
  *
  * Examples:
- *   'allChats' -> { navigator: 'chats', chatFilter: { kind: 'allChats' }, details: null }
- *   'allChats/chat/abc123' -> { navigator: 'chats', chatFilter: { kind: 'allChats' }, details: { type: 'chat', id: 'abc123' } }
- *   'flagged/chat/abc123' -> { navigator: 'chats', chatFilter: { kind: 'flagged' }, details: { type: 'chat', id: 'abc123' } }
+ *   'allSessions' -> { navigator: 'sessions', sessionFilter: { kind: 'allSessions' }, details: null }
+ *   'allSessions/session/abc123' -> { navigator: 'sessions', sessionFilter: { kind: 'allSessions' }, details: { type: 'session', id: 'abc123' } }
+ *   'flagged/session/abc123' -> { navigator: 'sessions', sessionFilter: { kind: 'flagged' }, details: { type: 'session', id: 'abc123' } }
  *   'sources' -> { navigator: 'sources', details: null }
  *   'sources/api' -> { navigator: 'sources', sourceFilter: { kind: 'type', sourceType: 'api' }, details: null }
  *   'sources/mcp' -> { navigator: 'sources', sourceFilter: { kind: 'type', sourceType: 'mcp' }, details: null }
@@ -114,7 +114,7 @@ export function parseCompoundRoute(route: string): ParsedCompoundRoute | null {
     const projectSlug = segments[1]
 
     if (segments.length === 2) {
-      return { navigator: 'project' as NavigatorType, details: null, chatFilter: { kind: 'allChats' as const } }
+      return { navigator: 'project' as NavigatorType, details: null, sessionFilter: { kind: 'allSessions' as const } }
     }
 
     // project/{slug}/chat/{sessionId}
@@ -122,7 +122,7 @@ export function parseCompoundRoute(route: string): ParsedCompoundRoute | null {
       return {
         navigator: 'project' as NavigatorType,
         details: { type: 'chat', id: segments[3] },
-        chatFilter: { kind: 'allChats' as const },
+        sessionFilter: { kind: 'allSessions' as const },
       }
     }
 
@@ -132,7 +132,7 @@ export function parseCompoundRoute(route: string): ParsedCompoundRoute | null {
       return {
         navigator: 'project' as NavigatorType,
         details: { type: 'file', id: filePath },
-        chatFilter: { kind: 'allChats' as const },
+        sessionFilter: { kind: 'allSessions' as const },
       }
     }
 
@@ -141,9 +141,8 @@ export function parseCompoundRoute(route: string): ParsedCompoundRoute | null {
 
   // Settings navigator
   if (first === 'settings') {
-    const subpage = (segments[1] || 'app') as SettingsSubpage
-    const validSubpages: SettingsSubpage[] = ['app', 'appearance', 'input', 'workspace', 'permissions', 'labels', 'shortcuts', 'preferences']
-    if (!validSubpages.includes(subpage)) return null
+    const subpage = segments[1] || 'app'
+    if (!isValidSettingsSubpage(subpage)) return null
     return {
       navigator: 'settings',
       details: { type: subpage, id: subpage },
@@ -203,34 +202,38 @@ export function parseCompoundRoute(route: string): ParsedCompoundRoute | null {
     return null
   }
 
-  // Chats navigator (allChats, flagged, state)
-  let chatFilter: ChatFilter
+  // Sessions navigator (allSessions, flagged, state)
+  let sessionFilter: SessionFilter
   let detailsStartIndex: number
 
   switch (first) {
-    case 'allChats':
-      chatFilter = { kind: 'allChats' }
+    case 'allSessions':
+      sessionFilter = { kind: 'allSessions' }
       detailsStartIndex = 1
       break
     case 'flagged':
-      chatFilter = { kind: 'flagged' }
+      sessionFilter = { kind: 'flagged' }
+      detailsStartIndex = 1
+      break
+    case 'archived':
+      sessionFilter = { kind: 'archived' }
       detailsStartIndex = 1
       break
     case 'state':
       if (!segments[1]) return null
       // Cast is safe because we're constructing from URL
-      chatFilter = { kind: 'state', stateId: segments[1] as ChatFilter & { kind: 'state' } extends { stateId: infer T } ? T : never }
+      sessionFilter = { kind: 'state', stateId: segments[1] as SessionFilter & { kind: 'state' } extends { stateId: infer T } ? T : never }
       detailsStartIndex = 2
       break
     case 'label':
       if (!segments[1]) return null
       // Label IDs are URL-decoded (simple slugs, no special characters expected)
-      chatFilter = { kind: 'label', labelId: decodeURIComponent(segments[1]) }
+      sessionFilter = { kind: 'label', labelId: decodeURIComponent(segments[1]) }
       detailsStartIndex = 2
       break
     case 'view':
       if (!segments[1]) return null
-      chatFilter = { kind: 'view', viewId: decodeURIComponent(segments[1]) }
+      sessionFilter = { kind: 'view', viewId: decodeURIComponent(segments[1]) }
       detailsStartIndex = 2
       break
     default:
@@ -241,18 +244,18 @@ export function parseCompoundRoute(route: string): ParsedCompoundRoute | null {
   if (segments.length > detailsStartIndex) {
     const detailsType = segments[detailsStartIndex]
     const detailsId = segments[detailsStartIndex + 1]
-    if (detailsType === 'chat' && detailsId) {
+    if (detailsType === 'session' && detailsId) {
       return {
-        navigator: 'chats',
-        chatFilter,
-        details: { type: 'chat', id: detailsId },
+        navigator: 'sessions',
+        sessionFilter,
+        details: { type: 'session', id: detailsId },
       }
     }
   }
 
   return {
-    navigator: 'chats',
-    chatFilter,
+    navigator: 'sessions',
+    sessionFilter,
     details: null,
   }
 }
@@ -263,7 +266,7 @@ export function parseCompoundRoute(route: string): ParsedCompoundRoute | null {
 export function buildCompoundRoute(parsed: ParsedCompoundRoute): string {
   if (parsed.navigator === 'settings') {
     const detailsType = parsed.details?.type || 'app'
-    return detailsType === 'app' ? 'settings' : `settings/${detailsType}`
+    return `settings/${detailsType}`
   }
 
   if (parsed.navigator === 'sources') {
@@ -289,17 +292,20 @@ export function buildCompoundRoute(parsed: ParsedCompoundRoute): string {
   // Note: 'project' navigator routes are built by buildRouteFromNavigationState directly
   // since they need projectSlug which isn't in ParsedCompoundRoute
 
-  // Chats navigator
+  // Sessions navigator
   let base: string
-  const filter = parsed.chatFilter
-  if (!filter) return 'allChats'
+  const filter = parsed.sessionFilter
+  if (!filter) return 'allSessions'
 
   switch (filter.kind) {
-    case 'allChats':
-      base = 'allChats'
+    case 'allSessions':
+      base = 'allSessions'
       break
     case 'flagged':
       base = 'flagged'
+      break
+    case 'archived':
+      base = 'archived'
       break
     case 'state':
       base = `state/${filter.stateId}`
@@ -311,11 +317,11 @@ export function buildCompoundRoute(parsed: ParsedCompoundRoute): string {
       base = `view/${encodeURIComponent(filter.viewId)}`
       break
     default:
-      base = 'allChats'
+      base = 'allSessions'
   }
 
   if (!parsed.details) return base
-  return `${base}/chat/${parsed.details.id}`
+  return `${base}/session/${parsed.details.id}`
 }
 
 // =============================================================================
@@ -326,10 +332,10 @@ export function buildCompoundRoute(parsed: ParsedCompoundRoute): string {
  * Parse a route string into structured navigation
  *
  * Examples:
- *   'allChats' -> { type: 'view', name: 'allChats', params: {} }
- *   'allChats/chat/abc123' -> { type: 'view', name: 'chat', id: 'abc123', params: { filter: 'allChats' } }
+ *   'allSessions' -> { type: 'view', name: 'allSessions', params: {} }
+ *   'allSessions/session/abc123' -> { type: 'view', name: 'session', id: 'abc123', params: { filter: 'allSessions' } }
  *   'settings/shortcuts' -> { type: 'view', name: 'shortcuts', params: {} }
- *   'action/new-chat' -> { type: 'action', name: 'new-chat', params: {} }
+ *   'action/new-session' -> { type: 'action', name: 'new-session', params: {} }
  */
 export function parseRoute(route: string): ParsedRoute | null {
   try {
@@ -401,13 +407,13 @@ function convertCompoundToViewRoute(compound: ParsedCompoundRoute): ParsedRoute 
     return { type: 'view', name: 'skill-info', id: compound.details.id, params: {} }
   }
 
-  // Chats
-  if (compound.chatFilter) {
-    const filter = compound.chatFilter
+  // Sessions
+  if (compound.sessionFilter) {
+    const filter = compound.sessionFilter
     if (compound.details) {
       return {
         type: 'view',
-        name: 'chat',
+        name: 'session',
         id: compound.details.id,
         params: {
           filter: filter.kind,
@@ -425,7 +431,7 @@ function convertCompoundToViewRoute(compound: ParsedCompoundRoute): ParsedRoute 
     }
   }
 
-  return { type: 'view', name: 'allChats', params: {} }
+  return { type: 'view', name: 'allSessions', params: {} }
 }
 
 // =============================================================================
@@ -439,7 +445,7 @@ function convertCompoundToViewRoute(compound: ParsedCompoundRoute): ParsedRoute 
  * determines all 3 panels (sidebar, navigator, main content).
  *
  * Supports:
- * - Compound routes: allChats, allChats/chat/abc, sources, sources/source/github, settings/shortcuts
+ * - Compound routes: allSessions, allSessions/session/abc, sources, sources/source/github, settings/shortcuts
  * - Right sidebar param: ?sidebar=sessionMetadata
  *
  * Returns null for action routes (they don't map to a navigation state) and invalid routes.
@@ -459,7 +465,7 @@ export function parseRouteToNavigationState(
       state = {
         navigator: 'project',
         projectSlug,
-        filter: { kind: 'allChats' },
+        filter: { kind: 'allSessions' },
         details: { type: 'chat', sessionId: segments[3] },
       }
     } else if (segments[2] === 'file' && segments[3]) {
@@ -467,14 +473,14 @@ export function parseRouteToNavigationState(
       state = {
         navigator: 'project',
         projectSlug,
-        filter: { kind: 'allChats' },
+        filter: { kind: 'allSessions' },
         details: { type: 'file', filePath },
       }
     } else {
       state = {
         navigator: 'project',
         projectSlug,
-        filter: { kind: 'allChats' },
+        filter: { kind: 'allSessions' },
         details: null,
       }
     }
@@ -534,8 +540,8 @@ function convertCompoundToNavigationState(compound: ParsedCompoundRoute): Naviga
   // Single project
   if (compound.navigator === 'project') {
     // Extract projectSlug from the route - we need a different approach
-    // The parsed compound stores the slug in chatFilter context or details
-    const filter = compound.chatFilter || { kind: 'allChats' as const }
+    // The parsed compound stores the slug in sessionFilter context or details
+    const filter = compound.sessionFilter || { kind: 'allSessions' as const }
     if (compound.details) {
       if (compound.details.type === 'chat') {
         return {
@@ -595,17 +601,17 @@ function convertCompoundToNavigationState(compound: ParsedCompoundRoute): Naviga
     }
   }
 
-  // Chats
-  const filter = compound.chatFilter || { kind: 'allChats' as const }
+  // Sessions
+  const filter = compound.sessionFilter || { kind: 'allSessions' as const }
   if (compound.details) {
     return {
-      navigator: 'chats',
+      navigator: 'sessions',
       filter,
-      details: { type: 'chat', sessionId: compound.details.id },
+      details: { type: 'session', sessionId: compound.details.id },
     }
   }
   return {
-    navigator: 'chats',
+    navigator: 'sessions',
     filter,
     details: null,
   }
@@ -659,11 +665,11 @@ function convertParsedRouteToNavigationState(parsed: ParsedRoute): NavigationSta
         }
       }
       return { navigator: 'skills', details: null }
-    case 'chat':
+    case 'session':
       if (parsed.id) {
         // Reconstruct filter from params
-        const filterKind = (parsed.params.filter || 'allChats') as ChatFilter['kind']
-        let filter: ChatFilter
+        const filterKind = (parsed.params.filter || 'allSessions') as SessionFilter['kind']
+        let filter: SessionFilter
         if (filterKind === 'state' && parsed.params.stateId) {
           filter = { kind: 'state', stateId: parsed.params.stateId }
         } else if (filterKind === 'label' && parsed.params.labelId) {
@@ -671,54 +677,60 @@ function convertParsedRouteToNavigationState(parsed: ParsedRoute): NavigationSta
         } else if (filterKind === 'view' && parsed.params.viewId) {
           filter = { kind: 'view', viewId: parsed.params.viewId }
         } else {
-          filter = { kind: filterKind as 'allChats' | 'flagged' }
+          filter = { kind: filterKind as 'allSessions' | 'flagged' | 'archived' }
         }
         return {
-          navigator: 'chats',
+          navigator: 'sessions',
           filter,
-          details: { type: 'chat', sessionId: parsed.id },
+          details: { type: 'session', sessionId: parsed.id },
         }
       }
-      return { navigator: 'chats', filter: { kind: 'allChats' }, details: null }
-    case 'allChats':
+      return { navigator: 'sessions', filter: { kind: 'allSessions' }, details: null }
+    case 'allSessions':
       return {
-        navigator: 'chats',
-        filter: { kind: 'allChats' },
+        navigator: 'sessions',
+        filter: { kind: 'allSessions' },
         details: null,
       }
     case 'flagged':
       return {
-        navigator: 'chats',
+        navigator: 'sessions',
         filter: { kind: 'flagged' },
+        details: null,
+      }
+    case 'archived':
+      return {
+        navigator: 'sessions',
+        filter: { kind: 'archived' },
         details: null,
       }
     case 'state':
       if (parsed.id) {
         return {
-          navigator: 'chats',
+          navigator: 'sessions',
           filter: { kind: 'state', stateId: parsed.id },
           details: null,
         }
       }
-      return { navigator: 'chats', filter: { kind: 'allChats' }, details: null }
+      return { navigator: 'sessions', filter: { kind: 'allSessions' }, details: null }
     case 'label':
       if (parsed.id) {
         return {
-          navigator: 'chats',
+          navigator: 'sessions',
           filter: { kind: 'label', labelId: parsed.id },
           details: null,
         }
       }
-      return { navigator: 'chats', filter: { kind: 'allChats' }, details: null }
+      return { navigator: 'sessions', filter: { kind: 'allSessions' }, details: null }
     case 'view':
       if (parsed.id) {
         return {
-          navigator: 'chats',
+          navigator: 'sessions',
           filter: { kind: 'view', viewId: parsed.id },
           details: null,
         }
       }
-      return { navigator: 'chats', filter: { kind: 'allChats' }, details: null }
+      return { navigator: 'sessions', filter: { kind: 'allSessions' }, details: null }
     default:
       return null
   }
@@ -729,7 +741,7 @@ function convertParsedRouteToNavigationState(parsed: ParsedRoute): NavigationSta
  */
 export function buildRouteFromNavigationState(state: NavigationState): string {
   if (state.navigator === 'settings') {
-    return state.subpage === 'app' ? 'settings' : `settings/${state.subpage}`
+    return `settings/${state.subpage}`
   }
 
   if (state.navigator === 'sources') {
@@ -771,15 +783,18 @@ export function buildRouteFromNavigationState(state: NavigationState): string {
     return base
   }
 
-  // Chats
+  // Sessions
   const filter = state.filter
   let base: string
   switch (filter.kind) {
-    case 'allChats':
-      base = 'allChats'
+    case 'allSessions':
+      base = 'allSessions'
       break
     case 'flagged':
       base = 'flagged'
+      break
+    case 'archived':
+      base = 'archived'
       break
     case 'state':
       base = `state/${filter.stateId}`
@@ -793,7 +808,7 @@ export function buildRouteFromNavigationState(state: NavigationState): string {
   }
 
   if (state.details) {
-    return `${base}/chat/${state.details.sessionId}`
+    return `${base}/session/${state.details.sessionId}`
   }
   return base
 }

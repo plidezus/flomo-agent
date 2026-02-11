@@ -14,6 +14,7 @@ import { PanelHeader } from '@/components/app-shell/PanelHeader'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { HeaderMenu } from '@/components/ui/HeaderMenu'
 import { routes } from '@/lib/navigate'
+import { isMac } from '@/lib/platform'
 import type { DetailsPageMeta } from '@/lib/navigation-registry'
 
 import {
@@ -72,9 +73,10 @@ export default function InputSettingsPage() {
     await window.electronAPI.setSpellCheck(enabled)
   }, [])
 
-  const handleSendMessageKeyChange = useCallback(async (key: 'enter' | 'cmd-enter') => {
+  const handleSendMessageKeyChange = useCallback((value: string) => {
+    const key = value as 'enter' | 'cmd-enter'
     setSendMessageKey(key)
-    await window.electronAPI.setSendMessageKey(key)
+    window.electronAPI.setSendMessageKey(key)
   }, [])
 
   return (
@@ -112,7 +114,7 @@ export default function InputSettingsPage() {
                     onValueChange={handleSendMessageKeyChange}
                     options={[
                       { value: 'enter', label: 'Enter', description: 'Use Shift+Enter for new lines' },
-                      { value: 'cmd-enter', label: '⌘ Enter', description: 'Use Enter for new lines' },
+                      { value: 'cmd-enter', label: isMac ? '⌘ Enter' : 'Ctrl+Enter', description: 'Use Enter for new lines' },
                     ]}
                   />
                 </SettingsCard>
