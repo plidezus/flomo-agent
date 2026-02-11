@@ -23,9 +23,13 @@ import {
   isSourcesNavigation,
   isSettingsNavigation,
   isSkillsNavigation,
+  isProjectsNavigation,
+  isProjectNavigation,
 } from '@/contexts/NavigationContext'
 import { AppSettingsPage, AppearanceSettingsPage, InputSettingsPage, WorkspaceSettingsPage, PermissionsSettingsPage, LabelsSettingsPage, PreferencesPage, ShortcutsPage, SourceInfoPage, ChatPage } from '@/pages'
 import SkillInfoPage from '@/pages/SkillInfoPage'
+import { ProjectHomePage } from '../project/ProjectHomePage'
+import { FileViewer } from '../project/FileViewer'
 
 export interface MainContentPanelProps {
   /** Whether the app is in focused mode (single chat, no sidebar) */
@@ -143,6 +147,58 @@ export function MainContentPanel({
         <div className="flex items-center justify-center h-full text-muted-foreground">
           <p className="text-sm">No skills configured</p>
         </div>
+      </Panel>
+    )
+  }
+
+  // Projects list navigator - show project info or empty state
+  if (isProjectsNavigation(navState)) {
+    if (navState.details) {
+      return wrapWithStoplight(
+        <Panel variant="grow" className={className}>
+          <ProjectHomePage
+            projectSlug={navState.details.projectSlug}
+            workspaceId={activeWorkspaceId || ''}
+          />
+        </Panel>
+      )
+    }
+    return wrapWithStoplight(
+      <Panel variant="grow" className={className}>
+        <div className="flex items-center justify-center h-full text-muted-foreground">
+          <p className="text-sm">Select a project or create a new one</p>
+        </div>
+      </Panel>
+    )
+  }
+
+  // Single project navigator - show chat, file, or project home
+  if (isProjectNavigation(navState)) {
+    if (navState.details?.type === 'chat') {
+      return wrapWithStoplight(
+        <Panel variant="grow" className={className}>
+          <ChatPage sessionId={navState.details.sessionId} />
+        </Panel>
+      )
+    }
+    if (navState.details?.type === 'file') {
+      return wrapWithStoplight(
+        <Panel variant="grow" className={className}>
+          <FileViewer
+            workspaceId={activeWorkspaceId || ''}
+            projectSlug={navState.projectSlug}
+            filePath={navState.details.filePath}
+          />
+        </Panel>
+      )
+    }
+    // Default: show project home page
+    return wrapWithStoplight(
+      <Panel variant="grow" className={className}>
+        <ProjectHomePage
+          projectSlug={navState.projectSlug}
+          workspaceId={activeWorkspaceId || ''}
+        />
       </Panel>
     )
   }

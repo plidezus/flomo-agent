@@ -366,6 +366,8 @@ interface ManagedSession {
   authRetryInProgress?: boolean
   // Whether this session is hidden from session list (e.g., mini edit sessions)
   hidden?: boolean
+  // ID of the project this session belongs to (undefined = unorganized/inbox)
+  projectId?: string
 }
 
 // Convert runtime Message to StoredMessage for persistence
@@ -894,6 +896,7 @@ export class SessionManager {
             sharedUrl: meta.sharedUrl,
             sharedId: meta.sharedId,
             hidden: meta.hidden,
+            projectId: meta.projectId,
           }
 
           this.sessions.set(meta.id, managed)
@@ -944,6 +947,7 @@ export class SessionManager {
           costUsd: 0,
         },
         hidden: managed.hidden,
+        projectId: managed.projectId,
       }
 
       // Queue for async persistence with debouncing
@@ -1266,6 +1270,7 @@ export class SessionManager {
         createdAt: m.createdAt,
         messageCount: m.messageCount,
         hidden: m.hidden,
+        projectId: m.projectId,
       }))
       .sort((a, b) => b.lastMessageAt - a.lastMessageAt)
   }
@@ -1308,6 +1313,7 @@ export class SessionManager {
       lastMessageRole: m.lastMessageRole,
       tokenUsage: m.tokenUsage,
       hidden: m.hidden,
+      projectId: m.projectId,
     }
   }
 
@@ -1406,6 +1412,7 @@ export class SessionManager {
       permissionMode: defaultPermissionMode,
       workingDirectory: resolvedWorkingDir,
       hidden: options?.hidden,
+      projectId: options?.projectId,
     })
 
     // Model priority: options.model > storedSession.model > workspace default
@@ -1457,6 +1464,7 @@ export class SessionManager {
       thinkingLevel: defaultThinkingLevel,
       sessionFolderPath: getSessionStoragePath(workspaceRootPath, storedSession.id),
       hidden: options?.hidden,
+      projectId: options?.projectId,
     }
   }
 

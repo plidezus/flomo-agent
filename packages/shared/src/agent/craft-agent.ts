@@ -888,6 +888,26 @@ export class CraftAgent {
         });
       }
 
+      // Load project guidelines if session belongs to a project
+      let projectGuidelines: string | undefined;
+      if (this.config.session?.projectId && this.workspaceRootPath) {
+        try {
+          const { listProjects } = await import('../projects/storage.ts');
+          const projects = await listProjects(this.workspaceRootPath);
+          const project = projects.find(p => p.id === this.config.session?.projectId);
+          if (project) {
+            const { loadProject } = await import('../projects/storage.ts');
+            const config = await loadProject(this.workspaceRootPath, project.slug);
+            if (config?.guidelines) {
+              projectGuidelines = config.guidelines;
+              debug('[chat] Loaded project guidelines for project:', project.slug);
+            }
+          }
+        } catch (err) {
+          debug('[chat] Failed to load project guidelines:', err);
+        }
+      }
+
       const options: Options = {
         ...getDefaultOptions(),
         model,
@@ -914,7 +934,7 @@ export class CraftAgent {
         // - Mini agents: Use custom (lean) system prompt without Claude Code preset
         // - Normal agents: Append to Claude Code's system prompt (recommended by docs)
         systemPrompt: this.config.systemPromptPreset === 'mini'
-          ? getSystemPrompt(undefined, undefined, this.workspaceRootPath, undefined, 'mini')
+          ? getSystemPrompt(undefined, undefined, this.workspaceRootPath, undefined, 'mini', projectGuidelines)
           : {
               type: 'preset' as const,
               preset: 'claude_code' as const,
@@ -923,7 +943,9 @@ export class CraftAgent {
                 this.pinnedPreferencesPrompt ?? undefined,
                 this.config.debugMode,
                 this.workspaceRootPath,
-                this.config.session?.workingDirectory
+                this.config.session?.workingDirectory,
+                undefined,
+                projectGuidelines,
               ),
             },
         // Use sdkCwd for SDK session storage - this is set once at session creation and never changes.

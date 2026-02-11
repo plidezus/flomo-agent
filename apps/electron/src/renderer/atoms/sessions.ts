@@ -68,6 +68,8 @@ export interface SessionMeta {
   messageCount?: number
   /** When true, session is hidden from session list (e.g., mini edit sessions) */
   hidden?: boolean
+  /** ID of the project this session belongs to (undefined = unorganized/inbox) */
+  projectId?: string
 }
 
 /**
@@ -122,6 +124,8 @@ export function extractSessionMeta(session: Session): SessionMeta {
     tokenUsage: session.tokenUsage,
     // Hidden sessions (e.g., mini edit sessions in EditPopover)
     hidden: session.hidden,
+    // Project association
+    projectId: session.projectId,
   }
 }
 

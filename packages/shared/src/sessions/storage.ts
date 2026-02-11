@@ -163,6 +163,7 @@ export async function createSession(
     enabledSourceSlugs?: string[];
     model?: string;
     hidden?: boolean;
+    projectId?: string;
   }
 ): Promise<SessionConfig> {
   ensureSessionsDir(workspaceRootPath);
@@ -190,6 +191,7 @@ export async function createSession(
     enabledSourceSlugs: options?.enabledSourceSlugs,
     model: options?.model,
     hidden: options?.hidden,
+    projectId: options?.projectId,
   };
 
   // Save empty session

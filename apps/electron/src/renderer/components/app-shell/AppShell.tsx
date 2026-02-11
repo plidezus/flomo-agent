@@ -22,6 +22,7 @@ import {
   Inbox,
   Globe,
   FolderOpen,
+  Briefcase,
   HelpCircle,
   ExternalLink,
 } from "lucide-react"
@@ -78,10 +79,11 @@ import { useFocusZone, useGlobalShortcuts } from "@/hooks/keyboard"
 import { useFocusContext } from "@/context/FocusContext"
 import { getSessionTitle } from "@/utils/session"
 import { useSetAtom } from "jotai"
-import type { Session, Workspace, FileAttachment, PermissionRequest, LoadedSource, LoadedSkill, PermissionMode, SourceFilter } from "../../../shared/types"
+import type { Session, Workspace, FileAttachment, PermissionRequest, LoadedSource, LoadedSkill, PermissionMode, SourceFilter, ProjectSummary } from "../../../shared/types"
 import { sessionMetaMapAtom, type SessionMeta } from "@/atoms/sessions"
 import { sourcesAtom } from "@/atoms/sources"
 import { skillsAtom } from "@/atoms/skills"
+import { projectsAtom } from "@/atoms/projects"
 import { type TodoStateId, type TodoState, statusConfigsToTodoStates } from "@/config/todo-states"
 import { useStatuses } from "@/hooks/useStatuses"
 import { useLabels } from "@/hooks/useLabels"
@@ -101,12 +103,15 @@ import {
   isSourcesNavigation,
   isSettingsNavigation,
   isSkillsNavigation,
+  isProjectsNavigation,
+  isProjectNavigation,
   type NavigationState,
   type ChatFilter,
 } from "@/contexts/NavigationContext"
 import type { SettingsSubpage } from "../../../shared/types"
 import { SourcesListPanel } from "./SourcesListPanel"
 import { SkillsListPanel } from "./SkillsListPanel"
+import { ProjectsListPanel } from "../project/ProjectsListPanel"
 import { PanelHeader } from "./PanelHeader"
 import { EditPopover, getEditConfig, type EditContextKey } from "@/components/ui/EditPopover"
 import { getDocUrl } from "@craft-agent/shared/docs/doc-links"
@@ -733,6 +738,13 @@ function AppShellContent({
   React.useEffect(() => {
     setSkillsAtom(skills)
   }, [skills, setSkillsAtom])
+
+  // Projects state (workspace-scoped)
+  const [projects, setProjects] = React.useState<ProjectSummary[]>([])
+  const setProjectsAtom = useSetAtom(projectsAtom)
+  React.useEffect(() => {
+    setProjectsAtom(projects)
+  }, [projects, setProjectsAtom])
   // Whether local MCP servers are enabled (affects stdio source status)
   const [localMcpEnabled, setLocalMcpEnabled] = React.useState(true)
 
@@ -792,6 +804,16 @@ function AppShellContent({
     })
     return cleanup
   }, [])
+
+  // Load projects from backend on mount
+  React.useEffect(() => {
+    if (!activeWorkspaceId) return
+    window.electronAPI.listProjects(activeWorkspaceId).then((loaded) => {
+      setProjects(loaded || [])
+    }).catch(err => {
+      console.error('[Chat] Failed to load projects:', err)
+    })
+  }, [activeWorkspaceId])
 
   // Handle session source selection changes
   const handleSessionSourcesChange = React.useCallback(async (sessionId: string, sourceSlugs: string[]) => {
@@ -1439,6 +1461,11 @@ function AppShellContent({
     navigate(routes.view.skills())
   }, [])
 
+  // Handler for projects view
+  const handleProjectsClick = useCallback(() => {
+    navigate(routes.view.projects())
+  }, [])
+
   // Handler for settings view
   const handleSettingsClick = useCallback((subpage: SettingsSubpage = 'app') => {
     navigate(routes.view.settings(subpage))
@@ -1643,6 +1670,7 @@ function AppShellContent({
     // 3. Sources, Skills, Settings
     result.push({ id: 'nav:sources', type: 'nav', action: handleSourcesClick })
     result.push({ id: 'nav:skills', type: 'nav', action: handleSkillsClick })
+    result.push({ id: 'nav:projects', type: 'nav', action: handleProjectsClick })
     result.push({ id: 'nav:settings', type: 'nav', action: () => handleSettingsClick('app') })
 
     return result
@@ -1767,6 +1795,13 @@ function AppShellContent({
 
     // Settings navigator
     if (isSettingsNavigation(navState)) return 'Settings'
+
+    // Projects navigator
+    if (isProjectsNavigation(navState)) return 'Projects'
+    if (isProjectNavigation(navState)) {
+      const proj = projects.find(p => p.slug === navState.projectSlug)
+      return proj?.name || 'Project'
+    }
 
     // Chats navigator - use chatFilter
     if (!chatFilter) return 'All Chats'
@@ -2080,6 +2115,14 @@ function AppShellContent({
                         type: 'skills',
                         onAddSkill: openAddSkill,
                       },
+                    },
+                    {
+                      id: "nav:projects",
+                      title: "Projects",
+                      label: String(projects.length),
+                      icon: Briefcase,
+                      variant: isProjectsNavigation(navState) || isProjectNavigation(navState) ? "default" : "ghost",
+                      onClick: handleProjectsClick,
                     },
                     // --- Separator ---
                     { id: "separator:skills-settings", type: "separator" },
@@ -2787,6 +2830,26 @@ function AppShellContent({
                 onSkillClick={handleSkillSelect}
                 onDeleteSkill={handleDeleteSkill}
                 selectedSkillSlug={isSkillsNavigation(navState) && navState.details?.type === 'skill' ? navState.details.skillSlug : null}
+              />
+            )}
+            {(isProjectsNavigation(navState) || isProjectNavigation(navState)) && activeWorkspaceId && (
+              /* Projects List */
+              <ProjectsListPanel
+                projects={projects}
+                workspaceId={activeWorkspaceId}
+                onProjectClick={(projectSlug) => navigate(routes.view.project(projectSlug))}
+                onNewProject={() => navigate(routes.action.newProject())}
+                onDeleteProject={async (projectSlug) => {
+                  await window.electronAPI.deleteProject(activeWorkspaceId, projectSlug)
+                  // Reload projects
+                  const updated = await window.electronAPI.listProjects(activeWorkspaceId)
+                  setProjects(updated || [])
+                  // Navigate back to projects list if deleted the active project
+                  if (isProjectNavigation(navState) && navState.projectSlug === projectSlug) {
+                    navigate(routes.view.projects())
+                  }
+                }}
+                selectedProjectSlug={isProjectNavigation(navState) ? navState.projectSlug : (isProjectsNavigation(navState) && navState.details ? navState.details.projectSlug : null)}
               />
             )}
             {isSettingsNavigation(navState) && (
