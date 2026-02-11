@@ -2,12 +2,12 @@
  * ProjectHomePage
  *
  * Main content panel for a single project. Shows project info,
- * a list of project sessions, and a files section.
+ * a list of project sessions, a files section, and project settings.
  */
 
 import * as React from 'react'
-import { useCallback, useEffect, useState } from 'react'
-import { Briefcase, MessageSquare, FileText, Plus } from 'lucide-react'
+import { useCallback, useEffect, useState, useRef } from 'react'
+import { Briefcase, MessageSquare, FileText, Plus, Settings, Check } from 'lucide-react'
 import { useAtomValue } from 'jotai'
 import { sessionMetaMapAtom, type SessionMeta } from '@/atoms/sessions'
 import { useNavigation } from '@/contexts/NavigationContext'
@@ -20,7 +20,7 @@ export interface ProjectHomePageProps {
   workspaceId: string
 }
 
-type Tab = 'chats' | 'files'
+type Tab = 'chats' | 'files' | 'settings'
 
 export function ProjectHomePage({ projectSlug, workspaceId }: ProjectHomePageProps) {
   const [project, setProject] = useState<ProjectConfig | null>(null)
@@ -29,11 +29,24 @@ export function ProjectHomePage({ projectSlug, workspaceId }: ProjectHomePagePro
   const { navigate } = useNavigation()
   const sessionMetaMap = useAtomValue(sessionMetaMapAtom)
 
+  // Edit state for settings tab
+  const [editName, setEditName] = useState('')
+  const [editDescription, setEditDescription] = useState('')
+  const [editGuidelines, setEditGuidelines] = useState('')
+  const [isSaving, setIsSaving] = useState(false)
+  const [saveMessage, setSaveMessage] = useState<string | null>(null)
+  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout>>()
+
   // Load project config
   useEffect(() => {
     if (!workspaceId || !projectSlug) return
     window.electronAPI.getProject(workspaceId, projectSlug).then((config) => {
       setProject(config)
+      if (config) {
+        setEditName(config.name)
+        setEditDescription(config.description || '')
+        setEditGuidelines(config.guidelines || '')
+      }
     }).catch(err => {
       console.error('[ProjectHomePage] Failed to load project:', err)
     })
@@ -101,6 +114,48 @@ export function ProjectHomePage({ projectSlug, workspaceId }: ProjectHomePagePro
     })
   }, [workspaceId, projectSlug])
 
+  // Save project settings
+  const handleSave = useCallback(async () => {
+    if (!workspaceId || !projectSlug || !project) return
+    setIsSaving(true)
+    setSaveMessage(null)
+    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current)
+
+    try {
+      const updates: Partial<Pick<ProjectConfig, 'name' | 'description' | 'guidelines'>> = {}
+      if (editName !== project.name) updates.name = editName
+      if (editDescription !== (project.description || '')) updates.description = editDescription
+      if (editGuidelines !== (project.guidelines || '')) updates.guidelines = editGuidelines
+
+      if (Object.keys(updates).length === 0) {
+        setSaveMessage('No changes')
+        saveTimeoutRef.current = setTimeout(() => setSaveMessage(null), 2000)
+        setIsSaving(false)
+        return
+      }
+
+      const updated = await window.electronAPI.updateProject(workspaceId, projectSlug, updates)
+      if (updated) {
+        setProject(updated)
+        setSaveMessage('Saved')
+        saveTimeoutRef.current = setTimeout(() => setSaveMessage(null), 2000)
+      }
+    } catch (err) {
+      console.error('[ProjectHomePage] Failed to save project:', err)
+      setSaveMessage('Save failed')
+      saveTimeoutRef.current = setTimeout(() => setSaveMessage(null), 3000)
+    } finally {
+      setIsSaving(false)
+    }
+  }, [workspaceId, projectSlug, project, editName, editDescription, editGuidelines])
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current)
+    }
+  }, [])
+
   if (!project) {
     return (
       <div className="flex items-center justify-center h-full text-muted-foreground">
@@ -142,6 +197,12 @@ export function ProjectHomePage({ projectSlug, workspaceId }: ProjectHomePagePro
             icon={<FileText className="h-3.5 w-3.5" />}
             label="Files"
             count={files.length}
+          />
+          <TabButton
+            active={activeTab === 'settings'}
+            onClick={() => setActiveTab('settings')}
+            icon={<Settings className="h-3.5 w-3.5" />}
+            label="Settings"
           />
         </div>
       </div>
@@ -215,6 +276,71 @@ export function ProjectHomePage({ projectSlug, workspaceId }: ProjectHomePagePro
             )}
           </div>
         )}
+
+        {activeTab === 'settings' && (
+          <div className="p-4 space-y-5 max-w-xl">
+            {/* Name */}
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Name</label>
+              <input
+                type="text"
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                className="w-full h-9 px-3 text-sm rounded-[8px] border border-border bg-background focus:outline-none focus:ring-1 focus:ring-foreground/20"
+                placeholder="Project name"
+              />
+            </div>
+
+            {/* Description */}
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Description</label>
+              <input
+                type="text"
+                value={editDescription}
+                onChange={(e) => setEditDescription(e.target.value)}
+                className="w-full h-9 px-3 text-sm rounded-[8px] border border-border bg-background focus:outline-none focus:ring-1 focus:ring-foreground/20"
+                placeholder="Brief description (optional)"
+              />
+            </div>
+
+            {/* Guidelines */}
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Guidelines</label>
+              <p className="text-xs text-muted-foreground">
+                Instructions injected into the agent system prompt for all chats in this project.
+              </p>
+              <textarea
+                value={editGuidelines}
+                onChange={(e) => setEditGuidelines(e.target.value)}
+                rows={8}
+                className="w-full px-3 py-2 text-sm rounded-[8px] border border-border bg-background focus:outline-none focus:ring-1 focus:ring-foreground/20 resize-y font-mono"
+                placeholder="e.g., Always use TypeScript strict mode. Follow the project's ESLint config..."
+              />
+            </div>
+
+            {/* Save button */}
+            <div className="flex items-center gap-3">
+              <button
+                onClick={handleSave}
+                disabled={isSaving || !editName.trim()}
+                className={cn(
+                  "flex items-center gap-1.5 h-8 px-4 text-sm font-medium rounded-[8px] transition-colors",
+                  isSaving || !editName.trim()
+                    ? "bg-foreground/5 text-muted-foreground cursor-not-allowed"
+                    : "bg-foreground text-background hover:bg-foreground/90"
+                )}
+              >
+                {isSaving ? 'Saving...' : 'Save'}
+              </button>
+              {saveMessage && (
+                <span className="flex items-center gap-1 text-sm text-muted-foreground">
+                  {saveMessage === 'Saved' && <Check className="h-3.5 w-3.5 text-green-500" />}
+                  {saveMessage}
+                </span>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )
@@ -231,7 +357,7 @@ function TabButton({
   onClick: () => void
   icon: React.ReactNode
   label: string
-  count: number
+  count?: number
 }) {
   return (
     <button
@@ -245,7 +371,9 @@ function TabButton({
     >
       {icon}
       {label}
-      <span className="text-xs text-muted-foreground">({count})</span>
+      {count !== undefined && (
+        <span className="text-xs text-muted-foreground">({count})</span>
+      )}
     </button>
   )
 }
